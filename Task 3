@@ -1,0 +1,163 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from sklearn.ensemble import RandomForestClassifier
+
+from sklearn.metrics import accuracy_score
+from sklearn.metrics import confusion_matrix
+from sklearn.metrics import classification_report
+
+bankdata=pd.read_csv("Churn_Modelling.csv")
+print(bankdata)
+#EDA STEP 1 (Data Analysis)
+print(bankdata.head(10))
+print(bankdata.columns)
+print(bankdata.shape)
+print(bankdata.dtypes)
+print(bankdata.isnull())
+print(bankdata.isnull().sum())
+print(bankdata['Exited'].value_counts())
+print(bankdata['Exited'].value_counts(normalize=True))
+print(bankdata[['Geography','Gender','HasCrCard']].value_counts())
+#finding correlation
+features=['Tenure','Balance','EstimatedSalary','CreditScore','Age','NumOfProducts']
+for i in features:
+    relationship=bankdata[i].corr(bankdata['Exited'])
+    print(i,':',relationship)
+
+plt.hist(bankdata['Balance'],bins=30)
+plt.xlabel('Balance')
+plt.ylabel('Frequency')
+plt.title('Histogram of Balance Feature')
+plt.show()
+plt.close()
+print('mean=',bankdata['Balance'].mean())
+print('median=',bankdata['Balance'].median())
+plt.hist(bankdata['Age'],bins=20)
+plt.xlabel('Age')
+plt.ylabel('Frequency')
+plt.title('Histogram of Age Feature')
+plt.show()
+plt.close()
+print('Age mean=',bankdata['Age'].mean())
+print('Age median=',bankdata['Age'].median())
+print(bankdata.isnull().sum())
+# EDA Completed here
+
+#Data Preprocessing
+#transformation of age feature
+# using   log transformation as it is positively skewed
+bankdata=bankdata.assign(Age_log=0)
+bankdata['Age_log']=np.log(bankdata['Age']+1)
+print('Age log mean=',bankdata['Age_log'].mean())
+print('Age log median=',bankdata['Age_log'].median())
+
+plt.hist(bankdata['Age_log'],bins=20)
+
+plt.xlabel('Age')
+plt.ylabel('Frequency')
+plt.title('Histogram of Age Feature')
+plt.show()
+plt.close()
+#using cube rute transformation
+bankdata=bankdata.assign(Balance_cb=0)
+bankdata['Balance_cb']=np.cbrt(bankdata['Balance'])
+
+print('balacemean= ',bankdata['Balance_cb'].mean() )
+print('balacemedian= ',bankdata['Balance_cb'].median() )
+plt.hist(bankdata['Balance_cb'],bins=20)
+plt.xlabel('Balance')
+plt.ylabel('Frequency')
+plt.title('Histogram of Balance Feature')
+plt.show()
+plt.close()
+
+#Encodiing Categorical Feature
+#one hot encoding for Geography
+
+bankdata['Geography']=bankdata['Geography'].str.strip()
+dummies=pd.get_dummies(bankdata['Geography'],prefix='Geography')
+dummies=dummies.astype(int)
+bankdata=pd.concat([bankdata,dummies],axis=1)
+bankdata.drop('Geography',axis=1 , inplace=True)
+
+bankdata['Gender']=bankdata['Gender'].map({
+    'Male':1,
+    'Female':0
+})
+bankdata.drop('Surname',axis=1,inplace=True)
+bankdata.drop('CustomerId',axis=1,inplace=True)
+bankdata.drop('RowNumber',axis=1,inplace=True)
+
+print(bankdata.dtypes)
+X = bankdata.drop(columns=['Exited'])
+y=bankdata['Exited']
+X_train,X_test,y_train,y_test=train_test_split(
+    X,y,
+    test_size=0.2,
+    random_state=42,
+    stratify=y
+)
+
+num_features = ['Age_log', 'Tenure', 'Balance_cb', 'NumOfProducts', 'EstimatedSalary']
+scaler = StandardScaler()
+X_train[num_features] = scaler.fit_transform(X_train[num_features])
+X_test[num_features] = scaler.transform(X_test[num_features])
+
+rt=RandomForestClassifier(
+    n_estimators=200,
+    max_depth=10,
+    min_samples_split=10,
+    min_samples_leaf=5,
+    class_weight='balanced',
+    random_state=42
+)
+rt.fit(X_train,y_train)
+y_pred=rt.predict(X_test)
+y_prob=rt.predict_proba(X_test)
+
+
+#Model Evauation
+accuracy = accuracy_score(y_test, y_pred)
+print("Accuracy:", accuracy)
+
+cm=confusion_matrix(y_test, y_pred)
+print('Confusion matrix:',cm)
+
+cr=classification_report(y_test, y_pred)
+print('Classification Report:',cr)
+
+importances = rt.feature_importances_
+feature_importance_df = pd.DataFrame({
+    'Feature': X.columns,
+    'Importance': importances
+})
+
+
+feature_importance_df = feature_importance_df.sort_values(
+    by='Importance',
+    ascending=False
+)
+
+print(feature_importance_df)
+
+# Horizontal bar chart for feature importance
+plt.figure(figsize=(10,6))  # set figure size
+
+plt.barh(
+    feature_importance_df['Feature'],  # features on y-axis
+    feature_importance_df['Importance'],  # importance scores on x-axis
+    color='pink'  # color of bars
+)
+
+plt.xlabel('Importance Score')  # x-axis label
+plt.ylabel('Feature')            # y-axis label
+plt.title('Feature Importance - Random Forest')  # chart title
+plt.gca().invert_yaxis()  # highest importance at the top
+plt.show()
+
+
+
+
